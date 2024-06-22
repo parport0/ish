@@ -16,8 +16,12 @@
 #define PTRACE_SETREGS_ 13
 #define PTRACE_GETFPREGS_ 14
 #define PTRACE_SETFPREGS_ 15
+#define PTRACE_ATTACH_ 16
+#define PTRACE_DETACH_ 17
+#define PTRACE_SYSCALL_ 24
 #define PTRACE_SETOPTIONS_ 0x4200
 #define PTRACE_GETSIGINFO_ 0x4202
+#define PTRACE_GET_SYSCALL_INFO_ 0x420e
 
 #define PTRACE_EVENT_FORK_ 1
 
@@ -55,6 +59,33 @@ struct user_fpregs_struct_ {
 struct user_ {
     struct user_regs_struct_ user_regs;
     char padding[286 - sizeof(struct user_regs_struct_)];
+};
+
+struct ptrace_syscall_info {
+  byte_t op;        /* Type of system call stop */
+  dword_t arch;     /* AUDIT_ARCH_* value; see seccomp(2) */
+  qword_t instruction_pointer; /* CPU instruction pointer */
+  qword_t stack_pointer;    /* CPU stack pointer */
+  union {
+	  struct {    /* op == PTRACE_SYSCALL_INFO_ENTRY */
+		  qword_t nr;       /* System call number */
+		  qword_t args[6];  /* System call arguments */
+	  } entry;
+	  struct {    /* op == PTRACE_SYSCALL_INFO_EXIT */
+		  sqword_t rval;     /* System call return value */
+		  byte_t is_error;  /* System call error flag;
+							 Boolean: does rval contain
+							 an error value (-ERRCODE) or
+							 a nonerror return value? */
+	  } exit;
+	  struct {    /* op == PTRACE_SYSCALL_INFO_SECCOMP */
+		  qword_t nr;       /* System call number */
+		  qword_t args[6];  /* System call arguments */
+		  dword_t ret_data; /* SECCOMP_RET_DATA portion
+							 of SECCOMP_RET_TRACE
+							 return value */
+	  } seccomp;
+  };
 };
 
 dword_t sys_ptrace(dword_t request, dword_t pid, addr_t addr, dword_t data);

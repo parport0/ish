@@ -53,6 +53,9 @@ struct task {
         cond_t cond;
 
         bool traced;
+        bool syscall_traced;
+        bool o_tracesysgood;
+		int syscall_stop_type;
         bool stopped;
         int signal;
         struct siginfo_ info;

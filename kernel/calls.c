@@ -265,7 +265,17 @@ void handle_interrupt(int interrupt) {
                 printk("%d(%s) stub syscall %d\n", current->pid, current->comm, syscall_num);
             }
             STRACE("%d call %-3d ", current->pid, syscall_num);
+            if (current->ptrace.syscall_traced == true) {
+		        current->ptrace.syscall_stop_type = 1;
+                send_signal(current, 0x80 | SIGTRAP_, SIGINFO_NIL);
+                current->ptrace.syscall_stop_type = 0;
+            }
             int result = syscall_table[syscall_num](cpu->ebx, cpu->ecx, cpu->edx, cpu->esi, cpu->edi, cpu->ebp);
+            if (current->ptrace.syscall_traced == true) {
+		        current->ptrace.syscall_stop_type = 2;
+                send_signal(current, 0x80 | SIGTRAP_, SIGINFO_NIL);
+                current->ptrace.syscall_stop_type = 0;
+            }
             STRACE(" = 0x%x\n", result);
             cpu->eax = result;
         }

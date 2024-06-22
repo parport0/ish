@@ -346,6 +346,13 @@ void receive_signals() {
     struct sigqueue *sigqueue, *tmp;
     list_for_each_entry_safe(&current->queue, sigqueue, tmp, queue) {
         int sig = sigqueue->info.sig;
+        unsigned add = 0;
+        if ((current->ptrace.syscall_traced) &&
+            (sig & 0x80))
+        {
+            sig &= (~0x80);
+            add = 0x80;
+        }
         if (sigset_has(blocked, sig))
             continue;
         list_remove(&sigqueue->queue);
@@ -356,7 +363,7 @@ void receive_signals() {
             // parent to tell it to continue.
             // Any signals received while waiting are left on the queue, except
             // for SIGKILL_, which causes an immediate exit.
-            signal_delivery_stop(sig, &sigqueue->info);
+            signal_delivery_stop(sig | add, &sigqueue->info);
         } else {
             receive_signal(sighand, &sigqueue->info);
         }

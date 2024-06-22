@@ -128,16 +128,59 @@ dword_t sys_ptrace(dword_t request, dword_t pid, addr_t addr, dword_t data) {
             return 0;
         }
 
+        case PTRACE_SYSCALL_:
         case PTRACE_CONT_: {
-            STRACE("ptrace(PTRACE_CONT, %d, %#x, %#x)", pid, addr, data);
+            if (request == PTRACE_SYSCALL_) {
+                STRACE("ptrace(PTRACE_SYSCALL, %d, %#x, %#x)", pid, addr, data);
+            } else {
+                STRACE("ptrace(PTRACE_CONT, %d, %#x, %#x)", pid, addr, data);
+            }
             struct task *child = find_child(pid);
             if (!child) return _EPERM;
 
             child->cpu.tf = false;
             child->ptrace.stopped = false;
+            if (request == PTRACE_SYSCALL_) {
+                child->ptrace.syscall_traced = true;
+            } else {
+                child->ptrace.syscall_traced = false;
+            }
             notify(&child->ptrace.cond);
             unlock(&child->ptrace.lock);
 
+            return 0;
+        }
+
+        case PTRACE_GET_SYSCALL_INFO_: {
+            STRACE("ptrace(PTRACE_GET_SYSCALL_INFO, %d, %#x, %#x)", pid, addr, data);
+            struct task *child = find_child(pid);
+            if (!child) return _EPERM;
+
+            struct user_regs_struct_ user_regs_ = {};
+            get_user_regs(&child->cpu, &user_regs_);
+
+			struct ptrace_syscall_info i = {
+				.op = 0,
+				.arch = 0x40000003,
+				.instruction_pointer = user_regs_.eip,
+				.stack_pointer = user_regs_.esp,
+			};
+
+			if (&child->ptrace.syscall_stop_type == 1) {
+				i.op = 1;
+				i.entry.nr = 6;
+			} else if (&child->ptrace.syscall_stop_type == 2) {
+				i.op = 2;
+				i.exit.rval = 0;
+			}
+
+            if (user_put(data, i)) {
+                unlock(&child->ptrace.lock);
+                return _EFAULT;
+            }
+
+            printf("ptrace(PTRACE_GET_SYSCALL_INFO, %d, %#x, %#x)\n", pid, addr, data);
+            unlock(&child->ptrace.lock);
             return 0;
         }
 
@@ -168,11 +211,13 @@ dword_t sys_ptrace(dword_t request, dword_t pid, addr_t addr, dword_t data) {
 
         case PTRACE_GETREGS_: {
             STRACE("ptrace(PTRACE_GETREGS, %d, %#x, %#x)", pid, addr, data);
+            printf("ptrace(PTRACE_GETREGS, %d, %#x, %#x)\n", pid, addr, data);
             struct task *child = find_child(pid);
             if (!child) return _EPERM;
 
             struct user_regs_struct_ user_regs_ = {};
             get_user_regs(&child->cpu, &user_regs_);
+            printf("eax = %#x\n", user_regs_.eax);
             if (user_put(data, user_regs_)) {
                 unlock(&child->ptrace.lock);
                 return _EFAULT;
@@ -233,7 +278,7 @@ dword_t sys_ptrace(dword_t request, dword_t pid, addr_t addr, dword_t data) {
 
         case PTRACE_SETOPTIONS_:
             STRACE("ptrace(PTRACE_SETOPTIONS, %d, %#x, %#x)", pid, addr, data);
-            return _EINVAL;
+            return 0;
 
         case PTRACE_GETSIGINFO_: {
             STRACE("ptrace(PTRACE_GETSIGINFO, %d, %#x, %#x)", pid, addr, data);
